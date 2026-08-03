@@ -97,24 +97,24 @@ sync_repo() {
 sync_repo "${MILABENCH_SOURCE}"
 
 # # --- discover idle CPU nodes → request half -----------------------------------
-# # Run on the CPU login; sinfo here only sees the CPU subcluster.
-# count_idle_cpu_nodes() {
-#   local sinfo_args=(-N -h -t idle -o '%N')
-#   if [[ -n "${PARTITION}" ]]; then
-#     sinfo_args+=(-p "${PARTITION}")
-#   fi
-#   # Prefer idle; fall back to "idle*" / available counts if needed.
-#   local idle
-#   idle="$(sinfo "${sinfo_args[@]}" 2>/dev/null | wc -l | tr -d ' ')"
-#   if [[ -z "${idle}" || "${idle}" -eq 0 ]]; then
-#     # %A = available/other node counts for the partition
-#     local avail_fmt part_args=()
-#     [[ -n "${PARTITION}" ]] && part_args=(-p "${PARTITION}")
-#     avail_fmt="$(sinfo -h "${part_args[@]}" -o '%A' 2>/dev/null | head -1 | cut -d/ -f1 || true)"
-#     idle="${avail_fmt:-0}"
-#   fi
-#   echo "${idle}"
-# }
+# Run on the CPU login; sinfo here only sees the CPU subcluster.
+count_idle_cpu_nodes() {
+  local sinfo_args=(-N -h -t idle -o '%N')
+  if [[ -n "${PARTITION}" ]]; then
+    sinfo_args+=(-p "${PARTITION}")
+  fi
+  # Prefer idle; fall back to "idle*" / available counts if needed.
+  local idle
+  idle="$(sinfo "${sinfo_args[@]}" 2>/dev/null | wc -l | tr -d ' ')"
+  if [[ -z "${idle}" || "${idle}" -eq 0 ]]; then
+    # %A = available/other node counts for the partition
+    local avail_fmt part_args=()
+    [[ -n "${PARTITION}" ]] && part_args=(-p "${PARTITION}")
+    avail_fmt="$(sinfo -h "${part_args[@]}" -o '%A' 2>/dev/null | head -1 | cut -d/ -f1 || true)"
+    idle="${avail_fmt:-0}"
+  fi
+  echo "${idle}"
+}
 
 if [[ -z "${NODES:-}" ]]; then
   IDLE_NODES="$(count_idle_cpu_nodes)"
