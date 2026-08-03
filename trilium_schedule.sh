@@ -96,129 +96,129 @@ sync_repo() {
 
 sync_repo "${MILABENCH_SOURCE}"
 
-# --- discover idle CPU nodes → request half -----------------------------------
-# Run on the CPU login; sinfo here only sees the CPU subcluster.
-count_idle_cpu_nodes() {
-  local sinfo_args=(-N -h -t idle -o '%N')
-  if [[ -n "${PARTITION}" ]]; then
-    sinfo_args+=(-p "${PARTITION}")
-  fi
-  # Prefer idle; fall back to "idle*" / available counts if needed.
-  local idle
-  idle="$(sinfo "${sinfo_args[@]}" 2>/dev/null | wc -l | tr -d ' ')"
-  if [[ -z "${idle}" || "${idle}" -eq 0 ]]; then
-    # %A = available/other node counts for the partition
-    local avail_fmt part_args=()
-    [[ -n "${PARTITION}" ]] && part_args=(-p "${PARTITION}")
-    avail_fmt="$(sinfo -h "${part_args[@]}" -o '%A' 2>/dev/null | head -1 | cut -d/ -f1 || true)"
-    idle="${avail_fmt:-0}"
-  fi
-  echo "${idle}"
-}
+# # --- discover idle CPU nodes → request half -----------------------------------
+# # Run on the CPU login; sinfo here only sees the CPU subcluster.
+# count_idle_cpu_nodes() {
+#   local sinfo_args=(-N -h -t idle -o '%N')
+#   if [[ -n "${PARTITION}" ]]; then
+#     sinfo_args+=(-p "${PARTITION}")
+#   fi
+#   # Prefer idle; fall back to "idle*" / available counts if needed.
+#   local idle
+#   idle="$(sinfo "${sinfo_args[@]}" 2>/dev/null | wc -l | tr -d ' ')"
+#   if [[ -z "${idle}" || "${idle}" -eq 0 ]]; then
+#     # %A = available/other node counts for the partition
+#     local avail_fmt part_args=()
+#     [[ -n "${PARTITION}" ]] && part_args=(-p "${PARTITION}")
+#     avail_fmt="$(sinfo -h "${part_args[@]}" -o '%A' 2>/dev/null | head -1 | cut -d/ -f1 || true)"
+#     idle="${avail_fmt:-0}"
+#   fi
+#   echo "${idle}"
+# }
 
-if [[ -z "${NODES:-}" ]]; then
-  IDLE_NODES="$(count_idle_cpu_nodes)"
-  NODES=$((IDLE_NODES / 2))
-  if [[ "${NODES}" -lt 2 ]]; then
-    NODES=2
-  fi
-  if [[ -n "${MAX_NODES}" && "${NODES}" -gt "${MAX_NODES}" ]]; then
-    NODES="${MAX_NODES}"
-  fi
-  echo "==> Idle CPU nodes: ${IDLE_NODES} → requesting half: ${NODES}"
-else
-  echo "==> Using explicit NODES=${NODES}"
-fi
-export NODES
+# if [[ -z "${NODES:-}" ]]; then
+#   IDLE_NODES="$(count_idle_cpu_nodes)"
+#   NODES=$((IDLE_NODES / 2))
+#   if [[ "${NODES}" -lt 2 ]]; then
+#     NODES=2
+#   fi
+#   if [[ -n "${MAX_NODES}" && "${NODES}" -gt "${MAX_NODES}" ]]; then
+#     NODES="${MAX_NODES}"
+#   fi
+#   echo "==> Idle CPU nodes: ${IDLE_NODES} → requesting half: ${NODES}"
+# else
+#   echo "==> Using explicit NODES=${NODES}"
+# fi
+# export NODES
 
-# Warn if we look like the GPU login.
-if hostname 2>/dev/null | grep -qiE 'trig|gpu'; then
-  echo "WARNING: CPU jobs should be submitted from trillium.alliancecan.ca" >&2
-fi
+# # Warn if we look like the GPU login.
+# if hostname 2>/dev/null | grep -qiE 'trig|gpu'; then
+#   echo "WARNING: CPU jobs should be submitted from trillium.alliancecan.ca" >&2
+# fi
 
-# --- toolchain ----------------------------------------------------------------
-module load python/"${PYTHON_VERSION}" 2>/dev/null || module load python || true
+# # --- toolchain ----------------------------------------------------------------
+# module load python/"${PYTHON_VERSION}" 2>/dev/null || module load python || true
 
-UV="${UV:-${HOME}/.local/bin/uv}"
-if [[ ! -x "${UV}" ]]; then
-  echo "Installing uv into ~/.local/bin ..."
-  curl -LsSf https://astral.sh/uv/install.sh | sh
-  UV="${HOME}/.local/bin/uv"
-fi
+# UV="${UV:-${HOME}/.local/bin/uv}"
+# if [[ ! -x "${UV}" ]]; then
+#   echo "Installing uv into ~/.local/bin ..."
+#   curl -LsSf https://astral.sh/uv/install.sh | sh
+#   UV="${HOME}/.local/bin/uv"
+# fi
 
-echo "==> Preparing workspace in ${MILABENCH_WORKDIR}"
-echo "    source=${MILABENCH_SOURCE}"
-echo "    config=${MILABENCH_CONFIG}"
-echo "    select=${MILABENCH_SELECT}"
+# echo "==> Preparing workspace in ${MILABENCH_WORKDIR}"
+# echo "    source=${MILABENCH_SOURCE}"
+# echo "    config=${MILABENCH_CONFIG}"
+# echo "    select=${MILABENCH_SELECT}"
 
-# --- milabench tool venv (login has internet) ---------------------------------
-if [[ ! -x "${MILABENCH_ENV}/bin/milabench" ]]; then
-  echo "==> Creating milabench venv at ${MILABENCH_ENV}"
-  "${UV}" venv --python="${PYTHON_VERSION}" "${MILABENCH_ENV}"
-fi
-# shellcheck disable=SC1091
-source "${MILABENCH_ENV}/bin/activate"
-if [[ "${MILABENCH_GPU_ARCH}" == "cuda" ]]; then
-  "${UV}" pip install -e "${MILABENCH_SOURCE}[cuda]"
-else
-  "${UV}" pip install -e "${MILABENCH_SOURCE}"
-fi
+# # --- milabench tool venv (login has internet) ---------------------------------
+# if [[ ! -x "${MILABENCH_ENV}/bin/milabench" ]]; then
+#   echo "==> Creating milabench venv at ${MILABENCH_ENV}"
+#   "${UV}" venv --python="${PYTHON_VERSION}" "${MILABENCH_ENV}"
+# fi
+# # shellcheck disable=SC1091
+# source "${MILABENCH_ENV}/bin/activate"
+# if [[ "${MILABENCH_GPU_ARCH}" == "cuda" ]]; then
+#   "${UV}" pip install -e "${MILABENCH_SOURCE}[cuda]"
+# else
+#   "${UV}" pip install -e "${MILABENCH_SOURCE}"
+# fi
 
-# Placeholder system file for install/prepare on the login node.
-cat > "${MILABENCH_WORKDIR}/system.login.yaml" <<EOF
-system:
-  arch: ${MILABENCH_GPU_ARCH}
-  nodes:
-    - name: login
-      ip: localhost
-      hostname: $(hostname)
-      user: ${USER}
-      main: true
-EOF
+# # Placeholder system file for install/prepare on the login node.
+# cat > "${MILABENCH_WORKDIR}/system.login.yaml" <<EOF
+# system:
+#   arch: ${MILABENCH_GPU_ARCH}
+#   nodes:
+#     - name: login
+#       ip: localhost
+#       hostname: $(hostname)
+#       user: ${USER}
+#       main: true
+# EOF
 
-# Seed the torch install_group venv with build backends before milabench install.
-# milabench uses --no-build-isolation by default; voir→omegaconf→antlr4 needs
-# setuptools, and some sdists need maturin.
-TORCH_VENV="${MILABENCH_BASE}/venv/torch"
-echo "==> Seeding build deps in ${TORCH_VENV}"
-rm -rf "${TORCH_VENV}"
-mkdir -p "${MILABENCH_BASE}/venv"
-"${UV}" venv --python="${PYTHON_VERSION}" "${TORCH_VENV}"
+# # Seed the torch install_group venv with build backends before milabench install.
+# # milabench uses --no-build-isolation by default; voir→omegaconf→antlr4 needs
+# # setuptools, and some sdists need maturin.
+# TORCH_VENV="${MILABENCH_BASE}/venv/torch"
+# echo "==> Seeding build deps in ${TORCH_VENV}"
+# rm -rf "${TORCH_VENV}"
+# mkdir -p "${MILABENCH_BASE}/venv"
+# "${UV}" venv --python="${PYTHON_VERSION}" "${TORCH_VENV}"
 
-"${UV}" pip install --python "${TORCH_VENV}/bin/python" \
-  puccinialin
+# "${UV}" pip install --python "${TORCH_VENV}/bin/python" \
+#   puccinialin
 
-"${UV}" pip install --python "${TORCH_VENV}/bin/python" \
-  setuptools wheel pip maturin poetry flit_core hatchling packaging
+# "${UV}" pip install --python "${TORCH_VENV}/bin/python" \
+#   setuptools wheel pip maturin poetry flit_core hatchling packaging
 
-"${UV}" pip install --python "${TORCH_VENV}/bin/python" \
-  -e $MILABENCH_SOURCE/benchmate
+# "${UV}" pip install --python "${TORCH_VENV}/bin/python" \
+#   -e $MILABENCH_SOURCE/benchmate
 
-SET_ARGS=("torch=${PYTORCH_VERSION}")
-if [[ "${MILABENCH_GPU_ARCH}" == "cuda" ]]; then
-  SET_ARGS+=("cuda=${CUDA_VERSION}")
-fi
-echo "==> milabench install (torchsrun / torch group)"
-milabench install \
-  --config "${MILABENCH_CONFIG}" \
-  --base "${MILABENCH_BASE}" \
-  --system "${MILABENCH_WORKDIR}/system.login.yaml" \
-  --set "${SET_ARGS[@]}" \
-  ${MILABENCH_ARGS}
+# SET_ARGS=("torch=${PYTORCH_VERSION}")
+# if [[ "${MILABENCH_GPU_ARCH}" == "cuda" ]]; then
+#   SET_ARGS+=("cuda=${CUDA_VERSION}")
+# fi
+# echo "==> milabench install (torchsrun / torch group)"
+# milabench install \
+#   --config "${MILABENCH_CONFIG}" \
+#   --base "${MILABENCH_BASE}" \
+#   --system "${MILABENCH_WORKDIR}/system.login.yaml" \
+#   --set "${SET_ARGS[@]}" \
+#   ${MILABENCH_ARGS}
 
-# benchrun is provided by benchmate; milabench install can report success even
-# when the console script never landed (uv + poetry scripts). Force it.
-echo "==> Ensuring benchmate/benchrun in ${TORCH_VENV}"
-"${UV}" pip install --python "${TORCH_VENV}/bin/python" -e "${MILABENCH_SOURCE}/benchmate"
-if [[ ! -x "${TORCH_VENV}/bin/benchrun" ]]; then
-  echo "ERROR: ${TORCH_VENV}/bin/benchrun missing after benchmate install" >&2
-  ls -la "${TORCH_VENV}/bin" >&2 || true
-  exit 1
-fi
-if [[ ! -x "${TORCH_VENV}/bin/python" ]] || ! "${TORCH_VENV}/bin/python" -c "import torch" 2>/dev/null; then
-  echo "ERROR: torch not importable in ${TORCH_VENV}" >&2
-  exit 1
-fi
+# # benchrun is provided by benchmate; milabench install can report success even
+# # when the console script never landed (uv + poetry scripts). Force it.
+# echo "==> Ensuring benchmate/benchrun in ${TORCH_VENV}"
+# "${UV}" pip install --python "${TORCH_VENV}/bin/python" -e "${MILABENCH_SOURCE}/benchmate"
+# if [[ ! -x "${TORCH_VENV}/bin/benchrun" ]]; then
+#   echo "ERROR: ${TORCH_VENV}/bin/benchrun missing after benchmate install" >&2
+#   ls -la "${TORCH_VENV}/bin" >&2 || true
+#   exit 1
+# fi
+# if [[ ! -x "${TORCH_VENV}/bin/python" ]] || ! "${TORCH_VENV}/bin/python" -c "import torch" 2>/dev/null; then
+#   echo "ERROR: torch not importable in ${TORCH_VENV}" >&2
+#   exit 1
+# fi
 
 # echo "==> milabench prepare"
 # milabench prepare \
