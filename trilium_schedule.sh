@@ -37,7 +37,11 @@ if [[ -z "${SCRATCH:-}" ]]; then
   exit 1
 fi
 
-export MILABENCH_SOURCE="${MILABENCH_SOURCE:-${SCRIPT_DIR}/milabench}"
+# Scripts live in <repo>/slurm/; milabench checkout is <repo>/milabench.
+# Scripts live in <repo>/slurm/; milabench checkout is <repo>/milabench.
+export MILABENCH_SOURCE="${MILABENCH_SOURCE:-${SCRIPT_DIR}/../milabench}"
+MILABENCH_SOURCE="$(cd "${MILABENCH_SOURCE}" && pwd)"
+export MILABENCH_SOURCE
 export MILABENCH_WORKDIR="${MILABENCH_WORKDIR:-${SCRATCH}/milabench_torchsrun}"
 export MILABENCH_ENV="${MILABENCH_ENV:-${MILABENCH_WORKDIR}/.env/${PYTHON_VERSION}}"
 export MILABENCH_BASE="${MILABENCH_BASE:-${MILABENCH_WORKDIR}/results}"
@@ -46,21 +50,26 @@ export MILABENCH_ARGS="${MILABENCH_ARGS:---select ${MILABENCH_SELECT}}"
 export PYTHONUNBUFFERED=1
 export MILABENCH_USE_TOML_DEPS=1
 
+if [[ ! -d "${MILABENCH_SOURCE}" ]]; then
+  echo "ERROR: milabench source not found at ${MILABENCH_SOURCE}" >&2
+  exit 1
+fi
+if [[ ! -f "${MILABENCH_CONFIG}" ]]; then
+  echo "ERROR: config not found at ${MILABENCH_CONFIG}" >&2
+  exit 1
+fi
+if [[ ! -d "${MILABENCH_SOURCE}/benchmarks/torchsrun" ]]; then
+  echo "ERROR: torchsrun bench missing at ${MILABENCH_SOURCE}/benchmarks/torchsrun" >&2
+  exit 1
+fi
+
 LOG_DIR="${MILABENCH_WORKDIR}/logs"
 ENV_FILE="${MILABENCH_WORKDIR}/job_env.sh"
 
 mkdir -p "${MILABENCH_WORKDIR}" "${MILABENCH_BASE}/runs" "${LOG_DIR}"
 
-if [[ ! -d "${MILABENCH_SOURCE}" ]]; then
-  echo "ERROR: milabench source not found at ${MILABENCH_SOURCE}" >&2
-  exit 1
-fi
 if [[ ! -f "${SBATCH_SCRIPT}" ]]; then
   echo "ERROR: missing ${SBATCH_SCRIPT}" >&2
-  exit 1
-fi
-if [[ ! -f "${MILABENCH_CONFIG}" ]]; then
-  echo "ERROR: config not found at ${MILABENCH_CONFIG}" >&2
   exit 1
 fi
 
