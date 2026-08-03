@@ -184,39 +184,41 @@ echo "==> Seeding build deps in ${TORCH_VENV}"
 rm -rf "${TORCH_VENV}"
 mkdir -p "${MILABENCH_BASE}/venv"
 "${UV}" venv --python="${PYTHON_VERSION}" "${TORCH_VENV}"
+
+"${UV}" pip install --python "${TORCH_VENV}/bin/python" \
+  puccinialin
+
 "${UV}" pip install --python "${TORCH_VENV}/bin/python" \
   setuptools wheel pip maturin poetry flit_core hatchling packaging
+
+"${UV}" pip install --python "${TORCH_VENV}/bin/python" \
+  -e $MILABENCH_SOURCE/benchmate
 
 SET_ARGS=("torch=${PYTORCH_VERSION}")
 if [[ "${MILABENCH_GPU_ARCH}" == "cuda" ]]; then
   SET_ARGS+=("cuda=${CUDA_VERSION}")
 fi
+echo "==> milabench install (torchsrun / torch group)"
+milabench install \
+  --config "${MILABENCH_CONFIG}" \
+  --base "${MILABENCH_BASE}" \
+  --system "${MILABENCH_WORKDIR}/system.login.yaml" \
+  --set "${SET_ARGS[@]}" \
+  ${MILABENCH_ARGS}
 
-# echo "==> milabench install (torchsrun / torch group)"
-# milabench install \
-#   --config "${MILABENCH_CONFIG}" \
-#   --base "${MILABENCH_BASE}" \
-#   --system "${MILABENCH_WORKDIR}/system.login.yaml" \
-#   --set "${SET_ARGS[@]}" \
-#   ${MILABENCH_ARGS}
-
-# (
-#         . /scratch/delaunay/milabench_torchsrun/results/venv/torch/bin/activate
-#         uv pip install -e $MILABENCH_SOURCE/benchmate
-# )
-# # benchrun is provided by benchmate; milabench install can report success even
-# # when the console script never landed (uv + poetry scripts). Force it.
-# echo "==> Ensuring benchmate/benchrun in ${TORCH_VENV}"
-# "${UV}" pip install --python "${TORCH_VENV}/bin/python" -e "${MILABENCH_SOURCE}/benchmate"
-# if [[ ! -x "${TORCH_VENV}/bin/benchrun" ]]; then
-#   echo "ERROR: ${TORCH_VENV}/bin/benchrun missing after benchmate install" >&2
-#   ls -la "${TORCH_VENV}/bin" >&2 || true
-#   exit 1
-# fi
-# if [[ ! -x "${TORCH_VENV}/bin/python" ]] || ! "${TORCH_VENV}/bin/python" -c "import torch" 2>/dev/null; then
-#   echo "ERROR: torch not importable in ${TORCH_VENV}" >&2
-#   exit 1
-# fi
+# benchrun is provided by benchmate; milabench install can report success even
+# when the console script never landed (uv + poetry scripts). Force it.
+echo "==> Ensuring benchmate/benchrun in ${TORCH_VENV}"
+"${UV}" pip install --python "${TORCH_VENV}/bin/python" -e "${MILABENCH_SOURCE}/benchmate"
+if [[ ! -x "${TORCH_VENV}/bin/benchrun" ]]; then
+  echo "ERROR: ${TORCH_VENV}/bin/benchrun missing after benchmate install" >&2
+  ls -la "${TORCH_VENV}/bin" >&2 || true
+  exit 1
+fi
+if [[ ! -x "${TORCH_VENV}/bin/python" ]] || ! "${TORCH_VENV}/bin/python" -c "import torch" 2>/dev/null; then
+  echo "ERROR: torch not importable in ${TORCH_VENV}" >&2
+  exit 1
+fi
 
 # echo "==> milabench prepare"
 # milabench prepare \
