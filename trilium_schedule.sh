@@ -38,8 +38,17 @@ if [[ -z "${SCRATCH:-}" ]]; then
 fi
 
 # Scripts live in <repo>/slurm/; milabench checkout is <repo>/milabench.
-# Scripts live in <repo>/slurm/; milabench checkout is <repo>/milabench.
-export MILABENCH_SOURCE="${MILABENCH_SOURCE:-${SCRIPT_DIR}/../milabench}"
+# Scripts live in <repo>/slurm/; milabench is usually <repo>/milabench.
+# On cluster some checkouts keep milabench next to the scripts — accept both.
+if [[ -z "${MILABENCH_SOURCE:-}" ]]; then
+  if [[ -d "${SCRIPT_DIR}/../milabench/milabench" ]]; then
+    MILABENCH_SOURCE="${SCRIPT_DIR}/../milabench"
+  elif [[ -d "${SCRIPT_DIR}/milabench/milabench" ]]; then
+    MILABENCH_SOURCE="${SCRIPT_DIR}/milabench"
+  else
+    MILABENCH_SOURCE="${SCRIPT_DIR}/../milabench"
+  fi
+fi
 MILABENCH_SOURCE="$(cd "${MILABENCH_SOURCE}" && pwd)"
 export MILABENCH_SOURCE
 export MILABENCH_WORKDIR="${MILABENCH_WORKDIR:-${SCRATCH}/milabench_torchsrun}"
@@ -49,6 +58,8 @@ export MILABENCH_CONFIG="${MILABENCH_CONFIG:-${MILABENCH_SOURCE}/config/diagnost
 export MILABENCH_ARGS="${MILABENCH_ARGS:---select ${MILABENCH_SELECT}}"
 export PYTHONUNBUFFERED=1
 export MILABENCH_USE_TOML_DEPS=1
+# Prefer link-copy on shared filesystems (VAST/scratch often cannot hardlink).
+export UV_LINK_MODE="${UV_LINK_MODE:-copy}"
 
 if [[ ! -d "${MILABENCH_SOURCE}" ]]; then
   echo "ERROR: milabench source not found at ${MILABENCH_SOURCE}" >&2
@@ -71,6 +82,23 @@ mkdir -p "${MILABENCH_WORKDIR}" "${MILABENCH_BASE}/runs" "${LOG_DIR}"
 if [[ ! -f "${SBATCH_SCRIPT}" ]]; then
   echo "ERROR: missing ${SBATCH_SCRIPT}" >&2
   exit 1
+fi
+
+# --- sync checkouts to remote tip of current branch ---------------------------
+sync_repo() {
+  local repo="$1"
+  local branch
+  branch="$(git -C "${repo}" branch --show-current)"
+  echo "==> git fetch + reset --hard origin/${branch} in ${repo}"
+  git -C "${repo}" fetch --force origin "${branch}"
+  git -C "${repo}" reset --hard "origin/${branch}"
+}
+
+sync_repo "${MILABENCH_SOURCE}"
+if PARENT_GIT="$(git -C "${SCRIPT_DIR}" rev-parse --show-toplevel 2>/dev/null)"; then
+  if [[ "${PARENT_GIT}" != "${MILABENCH_SOURCE}" ]]; then
+    sync_repo "${PARENT_GIT}"
+  fi
 fi
 
 # --- discover idle CPU nodes → request half -----------------------------------
@@ -148,6 +176,17 @@ system:
       user: ${USER}
       main: true
 EOF
+
+# Seed the torch install_group venv with build backends before milabench install.
+# milabench uses --no-build-isolation by default; voir→omegaconf→antlr4 needs
+# setuptools, and some sdists need maturin.
+TORCH_VENV="${MILABENCH_BASE}/venv/torch"
+echo "==> Seeding build deps in ${TORCH_VENV}"
+rm -rf "${TORCH_VENV}"
+mkdir -p "${MILABENCH_BASE}/venv"
+"${UV}" venv --python="${PYTHON_VERSION}" "${TORCH_VENV}"
+"${UV}" pip install --python "${TORCH_VENV}/bin/python" \
+  setuptools wheel pip maturin poetry flit_core hatchling packaging
 
 echo "==> milabench install (torchsrun / torch group)"
 milabench install \
