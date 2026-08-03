@@ -116,20 +116,20 @@ sync_repo "${MILABENCH_SOURCE}"
 #   echo "${idle}"
 # }
 
-# if [[ -z "${NODES:-}" ]]; then
-#   IDLE_NODES="$(count_idle_cpu_nodes)"
-#   NODES=$((IDLE_NODES / 2))
-#   if [[ "${NODES}" -lt 2 ]]; then
-#     NODES=2
-#   fi
-#   if [[ -n "${MAX_NODES}" && "${NODES}" -gt "${MAX_NODES}" ]]; then
-#     NODES="${MAX_NODES}"
-#   fi
-#   echo "==> Idle CPU nodes: ${IDLE_NODES} → requesting half: ${NODES}"
-# else
-#   echo "==> Using explicit NODES=${NODES}"
-# fi
-# export NODES
+if [[ -z "${NODES:-}" ]]; then
+  IDLE_NODES="$(count_idle_cpu_nodes)"
+  NODES=$((IDLE_NODES / 2))
+  if [[ "${NODES}" -lt 2 ]]; then
+    NODES=2
+  fi
+  if [[ -n "${MAX_NODES}" && "${NODES}" -gt "${MAX_NODES}" ]]; then
+    NODES="${MAX_NODES}"
+  fi
+  echo "==> Idle CPU nodes: ${IDLE_NODES} → requesting half: ${NODES}"
+else
+  echo "==> Using explicit NODES=${NODES}"
+fi
+export NODES
 
 # # Warn if we look like the GPU login.
 # if hostname 2>/dev/null | grep -qiE 'trig|gpu'; then
