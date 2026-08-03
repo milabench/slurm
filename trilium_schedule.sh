@@ -267,56 +267,23 @@ JOB_ID="$(sbatch --parsable \
   "${SBATCH_EXTRA[@]}" \
   "${SBATCH_SCRIPT}")"
 
-echo "Submitted job ${JOB_ID}"
-echo "Logs: ${LOG_DIR}/torchsrun_${JOB_ID}.out"
-
 OUTFILE="${LOG_DIR}/torchsrun_${JOB_ID}.out"
-ERRFILE="${LOG_DIR}/torchsrun_${JOB_ID}.err"
+touch "${OUTFILE}"
 
-if command -v jq >/dev/null 2>&1; then
-  SLURM_OUT="$(scontrol show job "${JOB_ID}" --json 2>/dev/null \
-    | jq -r '.jobs[0].standard_output // empty' || true)"
-  if [[ -n "${SLURM_OUT}" && "${SLURM_OUT}" != "null" ]]; then
-    OUTFILE="${SLURM_OUT}"
-  fi
-fi
+echo "Submitted job ${JOB_ID}"
+echo "Logs: ${OUTFILE}"
 
-echo "==> Waiting for job ${JOB_ID} (tail -f when output appears)"
-while true; do
-  STATE="$(squeue -j "${JOB_ID}" -h -o '%T' 2>/dev/null || true)"
-  if [[ -z "${STATE}" ]]; then
-    echo "Job ${JOB_ID} left the queue."
-    [[ -f "${OUTFILE}" ]] && cat "${OUTFILE}"
-    [[ -f "${ERRFILE}" && -s "${ERRFILE}" ]] && { echo "--- stderr ---"; cat "${ERRFILE}"; }
-    EXIT_CODE="$(sacct -j "${JOB_ID}" -n -P -o ExitCode 2>/dev/null | head -1 | cut -d: -f1 || true)"
-    exit "${EXIT_CODE:-0}"
-  fi
+# Exit the waiter when the job leaves the queue; GNU tail --pid stops with it.
+(
+  while [[ -n "$(squeue -j "${JOB_ID}" -h 2>/dev/null || true)" ]]; do
+    sleep 5
+  done
+) &
+WAIT_PID=$!
 
-  case "${STATE}" in
-    RUNNING|COMPLETING)
-      if [[ -f "${OUTFILE}" ]]; then
-        echo "Job ${JOB_ID} is ${STATE}; following ${OUTFILE}"
-        tail -n +1 -F "${OUTFILE}" &
-        TAIL_PID=$!
-        while [[ -n "$(squeue -j "${JOB_ID}" -h 2>/dev/null || true)" ]]; do
-          sleep 5
-        done
-        sleep 1
-        kill "${TAIL_PID}" 2>/dev/null || true
-        wait "${TAIL_PID}" 2>/dev/null || true
-        [[ -f "${ERRFILE}" && -s "${ERRFILE}" ]] && { echo "--- stderr ---"; cat "${ERRFILE}"; }
-        EXIT_CODE="$(sacct -j "${JOB_ID}" -n -P -o ExitCode 2>/dev/null | head -1 | cut -d: -f1 || true)"
-        EXIT_CODE="${EXIT_CODE:-0}"
-        echo "Job ${JOB_ID} finished (ExitCode=${EXIT_CODE})"
-        exit "${EXIT_CODE}"
-      fi
-      ;;
-    PENDING|CONFIGURING|REQUEUED)
-      echo "  [${STATE}] waiting for allocation..."
-      ;;
-    *)
-      echo "  [${STATE}] ..."
-      ;;
-  esac
-  sleep 10
-done
+echo "==> Following ${OUTFILE}"
+tail --pid="${WAIT_PID}" -f "${OUTFILE}"
+wait "${WAIT_PID}" 2>/dev/null || true
+
+EXIT_CODE="$(sacct -j "${JOB_ID}" -n -P -o ExitCode 2>/dev/null | head -1 | cut -d: -f1 || true)"
+exit "${EXIT_CODE:-0}"
