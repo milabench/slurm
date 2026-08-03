@@ -53,6 +53,7 @@ fi
 
 export MILABENCH_ARGS="${MILABENCH_ARGS:---select torchsrun}"
 export MILABENCH_USE_TOML_DEPS="${MILABENCH_USE_TOML_DEPS:-1}"
+export MILABENCH_GPU_ARCH="${MILABENCH_GPU_ARCH:-cpu}"
 export PYTHONUNBUFFERED=1
 # Keep writes on scratch / job RAM disk — never $HOME on Trillium compute.
 export TMPDIR="${SLURM_TMPDIR:-${MILABENCH_WORKDIR}/tmp}"

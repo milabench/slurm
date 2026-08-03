@@ -24,13 +24,13 @@ export TIME="${TIME:-1:00:00}"
 export PYTHON_VERSION="${PYTHON_VERSION:-3.12}"
 export CUDA_VERSION="${CUDA_VERSION:-130}"
 export PYTORCH_VERSION="${PYTORCH_VERSION:-2.10.0}"
-# CUDA wheels still fine for a CPU/gloo torchsrun smoke test.
-export MILABENCH_GPU_ARCH="${MILABENCH_GPU_ARCH:-cuda}"
+# CPU nodes: use voir's cpu backend (no NVML). Override to cuda only on GPU login.
+export MILABENCH_GPU_ARCH="${MILABENCH_GPU_ARCH:-cpu}"
 export MILABENCH_SELECT="${MILABENCH_SELECT:-torchsrun}"
 # Trillium CPU nodes are whole 192-core nodes.
 export CPUS_PER_TASK="${CPUS_PER_TASK:-192}"
 export PARTITION="${PARTITION:-}"
-export MAX_NODES="${MAX_NODES:-}"
+export MAX_NODES="${MAX_NODES:-64}"
 
 if [[ -z "${SCRATCH:-}" ]]; then
   echo "ERROR: \$SCRATCH is unset. Run this on a Trillium login node." >&2
@@ -95,11 +95,6 @@ sync_repo() {
 }
 
 sync_repo "${MILABENCH_SOURCE}"
-if PARENT_GIT="$(git -C "${SCRIPT_DIR}" rev-parse --show-toplevel 2>/dev/null)"; then
-  if [[ "${PARENT_GIT}" != "${MILABENCH_SOURCE}" ]]; then
-    sync_repo "${PARENT_GIT}"
-  fi
-fi
 
 # --- discover idle CPU nodes → request half -----------------------------------
 # Run on the CPU login; sinfo here only sees the CPU subcluster.
@@ -163,7 +158,11 @@ if [[ ! -x "${MILABENCH_ENV}/bin/milabench" ]]; then
 fi
 # shellcheck disable=SC1091
 source "${MILABENCH_ENV}/bin/activate"
-"${UV}" pip install -e "${MILABENCH_SOURCE}[${MILABENCH_GPU_ARCH}]"
+if [[ "${MILABENCH_GPU_ARCH}" == "cuda" ]]; then
+  "${UV}" pip install -e "${MILABENCH_SOURCE}[cuda]"
+else
+  "${UV}" pip install -e "${MILABENCH_SOURCE}"
+fi
 
 # Placeholder system file for install/prepare on the login node.
 cat > "${MILABENCH_WORKDIR}/system.login.yaml" <<EOF
@@ -188,12 +187,17 @@ mkdir -p "${MILABENCH_BASE}/venv"
 "${UV}" pip install --python "${TORCH_VENV}/bin/python" \
   setuptools wheel pip maturin poetry flit_core hatchling packaging
 
+SET_ARGS=("torch=${PYTORCH_VERSION}")
+if [[ "${MILABENCH_GPU_ARCH}" == "cuda" ]]; then
+  SET_ARGS+=("cuda=${CUDA_VERSION}")
+fi
+
 echo "==> milabench install (torchsrun / torch group)"
 milabench install \
   --config "${MILABENCH_CONFIG}" \
   --base "${MILABENCH_BASE}" \
   --system "${MILABENCH_WORKDIR}/system.login.yaml" \
-  --set "cuda=${CUDA_VERSION}" "torch=${PYTORCH_VERSION}" \
+  --set "${SET_ARGS[@]}" \
   ${MILABENCH_ARGS}
 
 echo "==> milabench prepare"
