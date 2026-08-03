@@ -20,7 +20,7 @@ SBATCH_SCRIPT="${SCRIPT_DIR}/trilium_run.sbatch"
 
 # --- defaults -----------------------------------------------------------------
 export ACCOUNT="${ACCOUNT:-rrg-bengioy-ad}"
-export TIME="${TIME:-1:00:00}"
+export TIME="${TIME:-0:15:00}"
 export PYTHON_VERSION="${PYTHON_VERSION:-3.12}"
 export CUDA_VERSION="${CUDA_VERSION:-130}"
 export PYTORCH_VERSION="${PYTORCH_VERSION:-2.10.0}"
@@ -29,7 +29,7 @@ export MILABENCH_GPU_ARCH="${MILABENCH_GPU_ARCH:-cpu}"
 export MILABENCH_SELECT="${MILABENCH_SELECT:-torchsrun}"
 # Trillium CPU nodes are whole 192-core nodes.
 export CPUS_PER_TASK="${CPUS_PER_TASK:-192}"
-export PARTITION="${PARTITION:-}"
+export PARTITION="${PARTITION:-debug}"
 export MAX_NODES="${MAX_NODES:-64}"
 
 if [[ -z "${SCRATCH:-}" ]]; then
@@ -192,20 +192,38 @@ if [[ "${MILABENCH_GPU_ARCH}" == "cuda" ]]; then
   SET_ARGS+=("cuda=${CUDA_VERSION}")
 fi
 
-echo "==> milabench install (torchsrun / torch group)"
-milabench install \
-  --config "${MILABENCH_CONFIG}" \
-  --base "${MILABENCH_BASE}" \
-  --system "${MILABENCH_WORKDIR}/system.login.yaml" \
-  --set "${SET_ARGS[@]}" \
-  ${MILABENCH_ARGS}
+# echo "==> milabench install (torchsrun / torch group)"
+# milabench install \
+#   --config "${MILABENCH_CONFIG}" \
+#   --base "${MILABENCH_BASE}" \
+#   --system "${MILABENCH_WORKDIR}/system.login.yaml" \
+#   --set "${SET_ARGS[@]}" \
+#   ${MILABENCH_ARGS}
 
-echo "==> milabench prepare"
-milabench prepare \
-  --config "${MILABENCH_CONFIG}" \
-  --base "${MILABENCH_BASE}" \
-  --system "${MILABENCH_WORKDIR}/system.login.yaml" \
-  ${MILABENCH_ARGS}
+# (
+#         . /scratch/delaunay/milabench_torchsrun/results/venv/torch/bin/activate
+#         uv pip install -e $MILABENCH_SOURCE/benchmate
+# )
+# # benchrun is provided by benchmate; milabench install can report success even
+# # when the console script never landed (uv + poetry scripts). Force it.
+# echo "==> Ensuring benchmate/benchrun in ${TORCH_VENV}"
+# "${UV}" pip install --python "${TORCH_VENV}/bin/python" -e "${MILABENCH_SOURCE}/benchmate"
+# if [[ ! -x "${TORCH_VENV}/bin/benchrun" ]]; then
+#   echo "ERROR: ${TORCH_VENV}/bin/benchrun missing after benchmate install" >&2
+#   ls -la "${TORCH_VENV}/bin" >&2 || true
+#   exit 1
+# fi
+# if [[ ! -x "${TORCH_VENV}/bin/python" ]] || ! "${TORCH_VENV}/bin/python" -c "import torch" 2>/dev/null; then
+#   echo "ERROR: torch not importable in ${TORCH_VENV}" >&2
+#   exit 1
+# fi
+
+# echo "==> milabench prepare"
+# milabench prepare \
+#   --config "${MILABENCH_CONFIG}" \
+#   --base "${MILABENCH_BASE}" \
+#   --system "${MILABENCH_WORKDIR}/system.login.yaml" \
+#   ${MILABENCH_ARGS}
 
 # Shared env for the sbatch job (paths on scratch, readable on compute nodes).
 cat > "${ENV_FILE}" <<EOF
