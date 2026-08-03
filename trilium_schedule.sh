@@ -179,10 +179,10 @@ export NODES
 # # Seed the torch install_group venv with build backends before milabench install.
 # # milabench uses --no-build-isolation by default; voir→omegaconf→antlr4 needs
 # # setuptools, and some sdists need maturin.
-# TORCH_VENV="${MILABENCH_BASE}/venv/torch"
+TORCH_VENV="${MILABENCH_BASE}/venv/torch"
 # echo "==> Seeding build deps in ${TORCH_VENV}"
 # rm -rf "${TORCH_VENV}"
-# mkdir -p "${MILABENCH_BASE}/venv"
+mkdir -p "${MILABENCH_BASE}/venv"
 # "${UV}" venv --python="${PYTHON_VERSION}" "${TORCH_VENV}"
 
 # "${UV}" pip install --python "${TORCH_VENV}/bin/python" \
@@ -191,8 +191,8 @@ export NODES
 # "${UV}" pip install --python "${TORCH_VENV}/bin/python" \
 #   setuptools wheel pip maturin poetry flit_core hatchling packaging
 
-# "${UV}" pip install --python "${TORCH_VENV}/bin/python" \
-#   -e $MILABENCH_SOURCE/benchmate
+"${UV}" pip install --python "${TORCH_VENV}/bin/python" \
+  -e $MILABENCH_SOURCE/benchmate
 
 # SET_ARGS=("torch=${PYTORCH_VERSION}")
 # if [[ "${MILABENCH_GPU_ARCH}" == "cuda" ]]; then
