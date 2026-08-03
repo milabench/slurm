@@ -137,14 +137,14 @@ export NODES
 # fi
 
 # # --- toolchain ----------------------------------------------------------------
-# module load python/"${PYTHON_VERSION}" 2>/dev/null || module load python || true
+module load python/"${PYTHON_VERSION}" 2>/dev/null || module load python || true
 
-# UV="${UV:-${HOME}/.local/bin/uv}"
-# if [[ ! -x "${UV}" ]]; then
-#   echo "Installing uv into ~/.local/bin ..."
-#   curl -LsSf https://astral.sh/uv/install.sh | sh
-#   UV="${HOME}/.local/bin/uv"
-# fi
+UV="${UV:-${HOME}/.local/bin/uv}"
+if [[ ! -x "${UV}" ]]; then
+  echo "Installing uv into ~/.local/bin ..."
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  UV="${HOME}/.local/bin/uv"
+fi
 
 # echo "==> Preparing workspace in ${MILABENCH_WORKDIR}"
 # echo "    source=${MILABENCH_SOURCE}"
