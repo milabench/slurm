@@ -14,10 +14,13 @@
 # Optional env overrides:
 #   MILABENCH_SOURCE / MILABENCH_WORKDIR / ACCOUNT / TIME / PARTITION
 #   PYTHON_VERSION / PYTORCH_VERSION / CPUS_PER_TASK / FOLLOW=0
-#   VLLM_CPU_VERSION=0.19.1  (GitHub release tag for +cpu wheels; torch 2.10 default)
 #   SKIP_INSTALL=1  (reuse an already-prepared workspace)
 
 set -euo pipefail
+
+# Bump when changing install logic (grep err.txt for this string to confirm cluster copy).
+SCHEDULE_SCRIPT_VERSION="2026-08-13-cpu-vllm-workaround-v4"
+echo "trilium_vllm_schedule.sh ${SCHEDULE_SCRIPT_VERSION}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SBATCH_SCRIPT="${SCRIPT_DIR}/trilium_vllm_run.sbatch"
@@ -29,7 +32,6 @@ export TIME="${TIME:-1:00:00}"
 export PYTHON_VERSION="${PYTHON_VERSION:-3.12}"
 export CUDA_VERSION="${CUDA_VERSION:-130}"
 export PYTORCH_VERSION="${PYTORCH_VERSION:-2.10.0}"
-export VLLM_CPU_VERSION="${VLLM_CPU_VERSION:-0.19.1}"
 export MILABENCH_GPU_ARCH="${MILABENCH_GPU_ARCH:-cpu}"
 # Space-separated list of diagnostic benches (one Slurm job each).
 export BENCHMARKS="${BENCHMARKS:-vllm-opt-125m-fp32-tp-nodes vllm-opt-125m-fp32-pp-nodes}"
@@ -61,6 +63,7 @@ export MILABENCH_WORKDIR="${MILABENCH_WORKDIR:-${SCRATCH}/milabench_vllm_ray}"
 export MILABENCH_ENV="${MILABENCH_ENV:-${MILABENCH_WORKDIR}/.env/${PYTHON_VERSION}}"
 export MILABENCH_BASE="${MILABENCH_BASE:-${MILABENCH_WORKDIR}/results}"
 export MILABENCH_CONFIG="${MILABENCH_CONFIG:-${MILABENCH_SOURCE}/config/diagnostic/diagnostic.yaml}"
+export UV_CACHE_DIR="${UV_CACHE_DIR:-${MILABENCH_WORKDIR}/uv-cache}"
 export PYTHONUNBUFFERED=1
 export MILABENCH_USE_TOML_DEPS=1
 export UV_LINK_MODE="${UV_LINK_MODE:-copy}"
@@ -86,7 +89,7 @@ LOG_DIR="${MILABENCH_WORKDIR}/logs"
 ENV_FILE="${MILABENCH_WORKDIR}/job_env.sh"
 TORCH_VENV="${MILABENCH_BASE}/venv/torch"
 
-mkdir -p "${MILABENCH_WORKDIR}" "${MILABENCH_BASE}/runs" "${MILABENCH_BASE}/venv" "${LOG_DIR}"
+mkdir -p "${MILABENCH_WORKDIR}" "${MILABENCH_BASE}/runs" "${MILABENCH_BASE}/venv" "${LOG_DIR}" "${UV_CACHE_DIR}"
 
 # num_machines for a bench: *-4nodes → 4, else 2 (matches diagnostic.yaml).
 bench_nodes() {
@@ -98,35 +101,29 @@ bench_nodes() {
   fi
 }
 
-# milabench TOML install calls resolve_vllm(required=True), which fails for arch=cpu
-# (empty cpu backend version, no [vllm.cpu] map). Install bench deps directly instead.
+# milabench TOML install calls resolve_vllm(required=True), which fails for arch=cpu.
+# For this diagnostic smoke test we only need importable deps — versions are not important.
 install_cpu_vllm_bench_deps() {
-  local torch_tag="torch$(echo "${PYTORCH_VERSION}" | tr -d '.')"
-  local pin_constraints="${MILABENCH_SOURCE}/.pin/constraints.cpu.${torch_tag}.txt"
-  local -a uv_args=(
-    pip install --python "${TORCH_VENV}/bin/python"
+  # Any recent vLLM GitHub release page with +cpu wheels (not a package pin).
+  local vllm_wheels="https://github.com/vllm-project/vllm/releases/expanded_assets/v0.19.1"
+  local -a uv=(
+    "${UV}" pip install --python "${TORCH_VENV}/bin/python"
+    --no-build-isolation
+    --index-strategy unsafe-best-match
     --index-url https://pypi.org/simple
-    --extra-index-url "https://download.pytorch.org/whl/cpu"
-    --find-links "https://github.com/vllm-project/vllm/releases/expanded_assets/v${VLLM_CPU_VERSION}"
   )
 
-  if [[ -f "${pin_constraints}" ]]; then
-    echo "    using pin constraints: ${pin_constraints}"
-    uv_args+=(-c "${pin_constraints}")
-  else
-    echo "    pin constraints missing (${pin_constraints}); installing unpinned torch deps"
-  fi
+  echo "==> Installing unpinned CPU smoke deps into ${TORCH_VENV}"
 
-  echo "==> Installing CPU vLLM bench deps into ${TORCH_VENV}"
-  echo "    torch=${PYTORCH_VERSION} vllm=${VLLM_CPU_VERSION}+cpu"
-  uv_args+=(
-    "voir>=0.2.19,<0.3"
-    "torch==${PYTORCH_VERSION}"
-    "ray"
-    "vllm==${VLLM_CPU_VERSION}+cpu"
-    "vllm[bench]==${VLLM_CPU_VERSION}+cpu"
-  )
-  "${UV}" "${uv_args[@]}"
+  echo "    torch / voir / ray"
+  "${uv[@]}" \
+    --extra-index-url https://download.pytorch.org/whl/cpu \
+    torch voir ray
+
+  echo "    vllm (+cpu wheels via GitHub release assets)"
+  "${uv[@]}" \
+    --find-links "${vllm_wheels}" \
+    vllm "vllm[bench]"
 }
 
 # --- sync checkouts to remote tip of current branch ---------------------------
@@ -248,7 +245,7 @@ export PYTHONUNBUFFERED=1
 export PYTHON_VERSION="${PYTHON_VERSION}"
 export CUDA_VERSION="${CUDA_VERSION}"
 export PYTORCH_VERSION="${PYTORCH_VERSION}"
-export VLLM_CPU_VERSION="${VLLM_CPU_VERSION}"
+export UV_CACHE_DIR="${UV_CACHE_DIR}"
 EOF
 
 SBATCH_EXTRA=()
