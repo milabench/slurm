@@ -14,6 +14,7 @@
 # Optional env overrides:
 #   MILABENCH_SOURCE / MILABENCH_WORKDIR / ACCOUNT / TIME / PARTITION
 #   PYTHON_VERSION / PYTORCH_VERSION / CPUS_PER_TASK / FOLLOW=0
+#   VLLM_CPU_VERSION=0.19.1  (GitHub release tag for +cpu wheels; torch 2.10 default)
 #   SKIP_INSTALL=1  (reuse an already-prepared workspace)
 
 set -euo pipefail
@@ -28,6 +29,7 @@ export TIME="${TIME:-1:00:00}"
 export PYTHON_VERSION="${PYTHON_VERSION:-3.12}"
 export CUDA_VERSION="${CUDA_VERSION:-130}"
 export PYTORCH_VERSION="${PYTORCH_VERSION:-2.10.0}"
+export VLLM_CPU_VERSION="${VLLM_CPU_VERSION:-0.19.1}"
 export MILABENCH_GPU_ARCH="${MILABENCH_GPU_ARCH:-cpu}"
 # Space-separated list of diagnostic benches (one Slurm job each).
 export BENCHMARKS="${BENCHMARKS:-vllm-opt-125m-fp32-tp-nodes vllm-opt-125m-fp32-pp-nodes}"
@@ -94,6 +96,37 @@ bench_nodes() {
   else
     echo 2
   fi
+}
+
+# milabench TOML install calls resolve_vllm(required=True), which fails for arch=cpu
+# (empty cpu backend version, no [vllm.cpu] map). Install bench deps directly instead.
+install_cpu_vllm_bench_deps() {
+  local torch_tag="torch$(echo "${PYTORCH_VERSION}" | tr -d '.')"
+  local pin_constraints="${MILABENCH_SOURCE}/.pin/constraints.cpu.${torch_tag}.txt"
+  local -a uv_args=(
+    pip install --python "${TORCH_VENV}/bin/python"
+    --index-url https://pypi.org/simple
+    --extra-index-url "https://download.pytorch.org/whl/cpu"
+    --find-links "https://github.com/vllm-project/vllm/releases/expanded_assets/v${VLLM_CPU_VERSION}"
+  )
+
+  if [[ -f "${pin_constraints}" ]]; then
+    echo "    using pin constraints: ${pin_constraints}"
+    uv_args+=(-c "${pin_constraints}")
+  else
+    echo "    pin constraints missing (${pin_constraints}); installing unpinned torch deps"
+  fi
+
+  echo "==> Installing CPU vLLM bench deps into ${TORCH_VENV}"
+  echo "    torch=${PYTORCH_VERSION} vllm=${VLLM_CPU_VERSION}+cpu"
+  uv_args+=(
+    "voir>=0.2.19,<0.3"
+    "torch==${PYTORCH_VERSION}"
+    "ray"
+    "vllm==${VLLM_CPU_VERSION}+cpu"
+    "vllm[bench]==${VLLM_CPU_VERSION}+cpu"
+  )
+  "${UV}" "${uv_args[@]}"
 }
 
 # --- sync checkouts to remote tip of current branch ---------------------------
@@ -168,13 +201,18 @@ EOF
 
   # Install once for all selected benches (shared install_group / definition).
   INSTALL_SELECT="$(echo "${BENCHMARKS}" | tr ' ' ',')"
-  echo "==> milabench install (--select ${INSTALL_SELECT})"
-  milabench install \
-    --config "${MILABENCH_CONFIG}" \
-    --base "${MILABENCH_BASE}" \
-    --system "${MILABENCH_WORKDIR}/system.login.yaml" \
-    --set "${SET_ARGS[@]}" \
-    --select "${INSTALL_SELECT}"
+  if [[ "${MILABENCH_GPU_ARCH}" == "cpu" ]]; then
+    echo "==> CPU workaround: skip milabench TOML install (broken vLLM map for arch=cpu)"
+    install_cpu_vllm_bench_deps
+  else
+    echo "==> milabench install (--select ${INSTALL_SELECT})"
+    milabench install \
+      --config "${MILABENCH_CONFIG}" \
+      --base "${MILABENCH_BASE}" \
+      --system "${MILABENCH_WORKDIR}/system.login.yaml" \
+      --set "${SET_ARGS[@]}" \
+      --select "${INSTALL_SELECT}"
+  fi
 
   if [[ ! -x "${TORCH_VENV}/bin/python" ]] || ! "${TORCH_VENV}/bin/python" -c "import vllm" 2>/dev/null; then
     echo "ERROR: vllm not importable in ${TORCH_VENV} after install" >&2
@@ -210,6 +248,7 @@ export PYTHONUNBUFFERED=1
 export PYTHON_VERSION="${PYTHON_VERSION}"
 export CUDA_VERSION="${CUDA_VERSION}"
 export PYTORCH_VERSION="${PYTORCH_VERSION}"
+export VLLM_CPU_VERSION="${VLLM_CPU_VERSION}"
 EOF
 
 SBATCH_EXTRA=()
