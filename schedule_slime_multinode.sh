@@ -17,6 +17,7 @@
 # env:  MILABENCH_BASE (default /home/delaunay/links/scratch/shared)   WORKDIR (default $MILABENCH_BASE/src)
 #       SELECT   benches to run (comma separated, see above)
 #       RESERVATION / ACCOUNT / TIME / GPUS   default MILABENCH2026 / def-bengioy_gpu / 04:00:00 / 4 (GPUs per node)
+#       UPDATE=1 fast-forward the checkout if it is behind origin/$BRANCH (default: fail)   BRANCH (default megatron)
 #       TEST_ONLY=1   sbatch --test-only: where/when it would start, nothing is submitted
 set -euo pipefail
 
@@ -31,6 +32,26 @@ GPUS=${GPUS:-4}
 SELECT=${SELECT:-slime-qwen2.5-0.5b-sft-2n4g,slime-qwen2.5-0.5b-grpo-colocate-2n4g,slime-qwen3-30b-a3b-sft-2n4g,slime-qwen3-30b-a3b-sft-routing-2n4g,slime-glm5.3-flash-sft-frozen}
 
 case $SELECT in *flash*) [ "$NODES" -ge 8 ] || { echo "the Flash bench needs 8 nodes (N=$NODES)" >&2; exit 1; } ;; esac
+# the job runs the checkout as it is: make sure it is the branch's latest code (this runs on the login node, which
+# has internet; the compute nodes do not). BRANCH=megatron by default; UPDATE=1 fast-forwards instead of failing.
+BRANCH=${BRANCH:-megatron}
+if git -C "$WORKDIR" fetch --quiet origin "$BRANCH"; then
+    behind=$(git -C "$WORKDIR" rev-list --count "HEAD..origin/$BRANCH")
+    if [ "$behind" != 0 ]; then
+        if [ "${UPDATE:-0}" = 1 ]; then
+            git -C "$WORKDIR" merge --ff-only "origin/$BRANCH"
+        else
+            echo "$WORKDIR is $behind commit(s) behind origin/$BRANCH: git pull there, or rerun with UPDATE=1" >&2
+            exit 1
+        fi
+    fi
+    [ -z "$(git -C "$WORKDIR" status --porcelain --untracked-files=no)" ] \
+        || echo "WARNING: $WORKDIR has local modifications, the job runs them" >&2
+    echo "milabench $(git -C "$WORKDIR" rev-parse --short HEAD) ($BRANCH, up to date)"
+else
+    echo "WARNING: could not fetch origin/$BRANCH, running $(git -C "$WORKDIR" rev-parse --short HEAD) unchecked" >&2
+fi
+
 [ -x "$WORKDIR/.venv/bin/milabench" ] || { echo "no milabench in $WORKDIR/.venv: run download_slime_data.sh first" >&2; exit 1; }
 [ -d "$MILABENCH_BASE/data/slime/models" ] || { echo "no $MILABENCH_BASE/data/slime/models: run download_slime_data.sh first" >&2; exit 1; }
 mkdir -p "$MILABENCH_BASE/slurm"
