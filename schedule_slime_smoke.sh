@@ -38,7 +38,7 @@ export MILABENCH_BASE WORKDIR SELECT
 # the reservation may not have started yet: show it so a pending job is not a surprise
 scontrol show reservation "$RESERVATION" 2>/dev/null | head -2 || true
 
-sbatch ${TEST_ONLY:+--test-only} \
+jobid=$(sbatch --parsable ${TEST_ONLY:+--test-only} \
     --job-name=slime-smoke \
     --reservation="$RESERVATION" --account="$ACCOUNT" \
     --nodes="$NODES" --ntasks-per-node=1 --exclusive --mem=0 \
@@ -46,4 +46,11 @@ sbatch ${TEST_ONLY:+--test-only} \
     --time="$TIME" \
     --output="$MILABENCH_BASE/slurm/slime-smoke-%j.out" \
     --export=ALL \
-    "$@" "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/slime_smoke.sbatch"
+    "$@" "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/slime_smoke.sbatch")
+[ -n "${TEST_ONLY:-}" ] && exit 0   # --test-only submits nothing
+echo "submitted job $jobid"
+
+# follow the log (the file only exists once the job starts, so create it first); ctrl-c stops tailing, not the job
+log=$MILABENCH_BASE/slurm/slime-smoke-${jobid%%;*}.out
+touch "$log"
+tail -f "$log"
