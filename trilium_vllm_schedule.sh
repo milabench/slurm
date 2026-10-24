@@ -19,7 +19,7 @@
 set -euo pipefail
 
 # Bump when changing install logic (grep err.txt for this string to confirm cluster copy).
-SCHEDULE_SCRIPT_VERSION="2026-08-13-cpu-vllm-workaround-v4"
+SCHEDULE_SCRIPT_VERSION="2026-08-13-cpu-vllm-workaround-v5"
 echo "trilium_vllm_schedule.sh ${SCHEDULE_SCRIPT_VERSION}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -115,15 +115,24 @@ install_cpu_vllm_bench_deps() {
 
   echo "==> Installing unpinned CPU smoke deps into ${TORCH_VENV}"
 
-  echo "    torch / voir / ray"
-  "${uv[@]}" \
-    --extra-index-url https://download.pytorch.org/whl/cpu \
-    torch voir ray
-
   echo "    vllm (+cpu wheels via GitHub release assets)"
   "${uv[@]}" \
     --find-links "${vllm_wheels}" \
     vllm "vllm[bench]"
+
+  # vllm pulls generic torchvision from PyPI; torch must come from the same
+  # pytorch.org cpu index or you get "operator torchvision::nms does not exist".
+  echo "    torch + torchvision (pytorch.org cpu index, force-reinstall)"
+  "${uv[@]}" \
+    --extra-index-url https://download.pytorch.org/whl/cpu \
+    --force-reinstall \
+    torch torchvision
+
+  echo "    voir + ray"
+  "${uv[@]}" voir ray
+
+  echo "==> Verifying imports"
+  "${TORCH_VENV}/bin/python" -c "import torch, torchvision; torchvision.ops.nms; import vllm; import ray"
 }
 
 # --- sync checkouts to remote tip of current branch ---------------------------
@@ -211,9 +220,9 @@ EOF
       --select "${INSTALL_SELECT}"
   fi
 
-  if [[ ! -x "${TORCH_VENV}/bin/python" ]] || ! "${TORCH_VENV}/bin/python" -c "import vllm" 2>/dev/null; then
-    echo "ERROR: vllm not importable in ${TORCH_VENV} after install" >&2
-    "${TORCH_VENV}/bin/python" -c "import vllm" >&2 || true
+  if [[ ! -x "${TORCH_VENV}/bin/python" ]] || ! "${TORCH_VENV}/bin/python" -c "import torch, torchvision; torchvision.ops.nms; import vllm" 2>/dev/null; then
+    echo "ERROR: torch/torchvision/vllm not importable in ${TORCH_VENV} after install" >&2
+    "${TORCH_VENV}/bin/python" -c "import torch, torchvision; torchvision.ops.nms; import vllm" >&2 || true
     exit 1
   fi
 
