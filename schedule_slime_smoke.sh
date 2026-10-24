@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Submit the slime smoke tests on N nodes of the MILABENCH2026 reservation (Rorqual).
 #
-#   MILABENCH_BASE=/home/delaunay/links/scratch/shared ./schedule_slime_smoke.sh [N] [extra sbatch args]
+#   ./schedule_slime_smoke.sh [N] [extra sbatch args]
 #
 # Run download_slime_data.sh first (login node): the compute nodes have no internet, so the job runs offline
 # against $MILABENCH_BASE (venv, HF weights, datasets, all on the shared filesystem).
@@ -13,13 +13,13 @@
 #      each node is an independent sample: node-to-node spread is part of the result).
 # Results: $MILABENCH_BASE/runs/slime-smoke.<jobid>.<node>   logs: $MILABENCH_BASE/slurm/slime-smoke-<jobid>.out
 #
-# env:  MILABENCH_BASE (required)   WORKDIR (default $MILABENCH_BASE/src, the checkout of download_slime_data.sh)
+# env:  MILABENCH_BASE (default /home/delaunay/links/scratch/shared)   WORKDIR (default $MILABENCH_BASE/src, the checkout of download_slime_data.sh)
 #       SELECT   benches to run (default: the 3 Qwen2.5-0.5B smoke entries)
 #       RESERVATION / ACCOUNT / TIME / GPUS   default MILABENCH2026 / def-bengioy_gpu / 03:00:00 / 4 (GPUs per node)
 #       TEST_ONLY=1   sbatch --test-only: where/when it would start, nothing is submitted
 set -euo pipefail
 
-: "${MILABENCH_BASE:?set MILABENCH_BASE (the shared directory used by download_slime_data.sh)}"
+MILABENCH_BASE=${MILABENCH_BASE:-/home/delaunay/links/scratch/shared}
 NODES=${1:-1}
 [ $# -gt 0 ] && shift
 WORKDIR=${WORKDIR:-$MILABENCH_BASE/src}
