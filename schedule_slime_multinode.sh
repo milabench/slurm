@@ -52,6 +52,27 @@ else
     echo "WARNING: could not fetch origin/$BRANCH, running $(git -C "$WORKDIR" rev-parse --short HEAD) unchecked" >&2
 fi
 
+# GLM-5.x needs a few packages that benchfile.py skips (sglang is installed --no-deps) or that are not in
+# requirements: install what is missing from the login node (the compute nodes have no internet), pins from slime's
+# Dockerfile / sglang 0.5.21. module=package pairs; all are wheels, nothing is compiled.
+case $SELECT in *glm*)
+    venv_py=$MILABENCH_BASE/venv/torch/bin/python
+    missing=()
+    for pair in fla=flash-linear-attention==0.5.2 tilelang=tilelang==0.1.12 deep_gemm=sgl-deep-gemm==0.2.0 sgl_kernel=sglang-kernel==0.4.7; do
+        "$venv_py" -c "import ${pair%%=*}" 2>/dev/null || missing+=("${pair#*=}")
+    done
+    if [ ${#missing[@]} -gt 0 ]; then
+        echo "installing ${missing[*]}"
+        if command -v uv >/dev/null; then uv pip install --python "$venv_py" "${missing[@]}"; else "$venv_py" -m pip install "${missing[@]}"; fi
+    fi
+    # import the model plugin the way slime does: a missing module is reported here instead of after the job started
+    # (slime swallows the ImportError and fails later with "specialize for NoneType"). A login node has no GPU, so only warn.
+    code=$WORKDIR/benchmarks/slime
+    PYTHONPATH=$code:$code/slime_src:$code/Megatron-LM "$venv_py" -c "import slime_plugins.models.glm5_next.model" 2>&1 | tail -3 \
+        || echo "WARNING: slime_plugins.models.glm5_next does not import on this node, see above" >&2
+    ;;
+esac
+
 [ -x "$WORKDIR/.venv/bin/milabench" ] || { echo "no milabench in $WORKDIR/.venv: run download_slime_data.sh first" >&2; exit 1; }
 [ -d "$MILABENCH_BASE/data/slime/models" ] || { echo "no $MILABENCH_BASE/data/slime/models: run download_slime_data.sh first" >&2; exit 1; }
 mkdir -p "$MILABENCH_BASE/slurm"
