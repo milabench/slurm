@@ -31,6 +31,7 @@ TIME=${TIME:-04:00:00}
 GPUS=${GPUS:-4}
 SELECT=${SELECT:-slime-qwen2.5-0.5b-sft-2n4g,slime-qwen2.5-0.5b-grpo-colocate-2n4g,slime-qwen3-30b-a3b-sft-2n4g,slime-qwen3-30b-a3b-sft-routing-2n4g,slime-glm5.3-flash-sft-frozen}
 
+case $SELECT in *-16n*) [ "$NODES" -ge 16 ] || { echo "the 744B bench needs 16 nodes (N=$NODES)" >&2; exit 1; } ;; esac
 case $SELECT in *flash*) [ "$NODES" -ge 8 ] || { echo "the Flash bench needs 8 nodes (N=$NODES)" >&2; exit 1; } ;; esac
 # the job runs the checkout as it is: make sure it is the branch's latest code (this runs on the login node, which
 # has internet; the compute nodes do not). BRANCH=megatron by default; UPDATE=1 fast-forwards instead of failing.
@@ -71,8 +72,10 @@ case $SELECT in *glm*)
     # import the model plugin the way slime does: a missing module is reported here instead of after the job started
     # (slime swallows the ImportError and fails later with "specialize for NoneType"). A login node has no GPU, so only warn.
     code=$WORKDIR/benchmarks/slime
-    PYTHONPATH=$code:$code/slime_src:$code/Megatron-LM "$venv_py" -c "import slime_plugins.models.glm5_next.model" 2>&1 | tail -3 \
-        || echo "WARNING: slime_plugins.models.glm5_next does not import on this node, see above" >&2
+    for plugin in slime_plugins.models.glm5_next.model slime_plugins.models.glm5.glm5; do
+        PYTHONPATH=$code:$code/slime_src:$code/Megatron-LM "$venv_py" -c "import $plugin" 2>&1 | tail -3 \
+            || echo "WARNING: $plugin does not import on this node, see above" >&2
+    done
     ;;
 esac
 
