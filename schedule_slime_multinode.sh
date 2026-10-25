@@ -61,6 +61,9 @@ case $SELECT in *glm*)
     for pair in fla=flash-linear-attention==0.5.2 tilelang=tilelang==0.1.12 deep_gemm=sgl-deep-gemm==0.2.0 sgl_kernel=sglang-kernel==0.4.7; do
         "$venv_py" -c "import ${pair%%=*}" 2>/dev/null || missing+=("${pair#*=}")
     done
+    # transformers: exactly sglang 0.5.21's pin. Two other releases seen failing on the GLM plugin: the one first installed
+    # (rejected the deepseek_sparse_attention layer_types) and 5.20.x (GlmOcr vision rope "supports only axial rope")
+    "$venv_py" -c "import sys, transformers; sys.exit(transformers.__version__ != '5.12.1')" 2>/dev/null || missing+=("transformers==5.12.1")
     if [ ${#missing[@]} -gt 0 ]; then
         echo "installing ${missing[*]}"
         if command -v uv >/dev/null; then uv pip install --python "$venv_py" "${missing[@]}"; else "$venv_py" -m pip install "${missing[@]}"; fi
