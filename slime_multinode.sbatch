@@ -13,6 +13,10 @@ export MILABENCH_GPU_ARCH=cuda
 export PYTHONUNBUFFERED=1
 export HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1
 unset SLIME_DOWNLOAD_ONLY
+# Ray (2.5x+) authenticates its RPCs with a token that every node must share (head, workers, raywait, the driver):
+# one random token per job, exported here so srun hands it to every task. Not written to disk.
+export RAY_AUTH_MODE=token
+export RAY_AUTH_TOKEN=${RAY_AUTH_TOKEN:-$(head -c 48 /dev/urandom | base64 | tr -dc 'A-Za-z0-9')}
 export SLIME_CONVERT_NPROC=${SLIME_CONVERT_NPROC:-4}   # one node: 4 GPUs (dev.yaml says 8)
 config=$WORKDIR/benchmarks/slime/dev.yaml
 system=$MILABENCH_BASE/slurm/system.$SLURM_JOB_ID.yaml
