@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Job script of schedule_slime_multinode.sh: multi-node slime benches on 4-GPU nodes (Ray through RayCluster).
-# Needs MILABENCH_BASE, WORKDIR and SELECT in the environment (--export=ALL).
+# Needs MILABENCH_BASE, WORKDIR and SELECT (and optionally CONFIG) in the environment (--export=ALL).
 #   1. first node: `milabench prepare` (Qwen3-30B torch_dist conversion on 4 GPUs; Flash is loaded from HF, no
 #      conversion). Offline: the weights were downloaded from a login node.
 #   2. `milabench slurm system` describes the allocation, then ONE `milabench run` over all of SELECT: each bench
@@ -18,7 +18,7 @@ unset SLIME_DOWNLOAD_ONLY
 export RAY_AUTH_MODE=token
 export RAY_AUTH_TOKEN=${RAY_AUTH_TOKEN:-$(head -c 48 /dev/urandom | base64 | tr -dc 'A-Za-z0-9')}
 export SLIME_CONVERT_NPROC=${SLIME_CONVERT_NPROC:-4}   # one node: 4 GPUs (dev.yaml says 8)
-config=$WORKDIR/benchmarks/slime/dev.yaml
+config=${CONFIG:-$WORKDIR/benchmarks/slime/dev.yaml}
 system=$MILABENCH_BASE/slurm/system.$SLURM_JOB_ID.yaml
 echo "[multinode] job=$SLURM_JOB_ID nodes=$SLURM_JOB_NODELIST select=$SELECT"
 
