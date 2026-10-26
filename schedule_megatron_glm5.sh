@@ -5,10 +5,11 @@
 #   megatron-glm5-frozen-smoke-2n-topo   2 nodes  same, nodes ordered by leaf switch
 # Full size (744B, 16 nodes): SELECT=megatron-glm5-frozen-16n,megatron-glm5-frozen-16n-topo,megatron-glm5-frozen-16n-topo-pp \
 #   ./schedule_megatron_glm5.sh   (N=16 then: NODES=16)
-# Setup once from a login node: download_megatron_data.sh (venv, slime / Megatron-LM checkouts, model config.json).
+# One command, from a login node (internet): first download_megatron_data.sh (checkout, venv, slime / Megatron-LM
+# clones, TE wheels, model config.json; cheap when already done), then the job is submitted.
 #
 #   ./schedule_megatron_glm5.sh [extra sbatch args]
-#   env: NODES (default 2)  TIME (default 01:00:00)  UPDATE (default 1: fast-forward the checkout)  SELECT
+#   env: SKIP_DOWNLOAD=1 (submit only)  NODES (default 2)  TIME (default 01:00:00)  UPDATE (default 1: fast-forward the checkout)  SELECT
 set -euo pipefail
 here=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
 
@@ -16,4 +17,5 @@ export PACK=megatron
 export SELECT=${SELECT:-megatron-glm5-frozen-smoke-2n,megatron-glm5-frozen-smoke-2n-topo}
 export TIME=${TIME:-01:00:00}
 export UPDATE=${UPDATE:-1}
+[ "${SKIP_DOWNLOAD:-0}" = 1 ] || "$here/download_megatron_data.sh"
 exec "$here/schedule_slime_multinode.sh" "${NODES:-2}" "$@"
