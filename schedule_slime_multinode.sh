@@ -20,6 +20,7 @@
 #       UPDATE=1 fast-forward the checkout if it is behind origin/$BRANCH (default: fail)   BRANCH (default megatron)
 #       PACK (default slime) / CONFIG (default $WORKDIR/benchmarks/$PACK/dev.yaml): the megatron pack runs the same way,
 #       see schedule_megatron_glm5.sh
+#       NO_TAIL=1     do not follow the log after submitting
 #       TEST_ONLY=1   sbatch --test-only: where/when it would start, nothing is submitted
 set -euo pipefail
 
@@ -105,6 +106,7 @@ jobid=$(sbatch --parsable ${TEST_ONLY:+--test-only} \
     "$@" "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/slime_multinode.sbatch")
 [ -n "${TEST_ONLY:-}" ] && exit 0   # --test-only submits nothing
 echo "submitted job $jobid"
+[ -n "${NO_TAIL:-}" ] && exit 0   # several submissions in a row: do not follow the log
 
 # follow the log (the file only exists once the job starts, so create it first); ctrl-c stops tailing, not the job
 log=$MILABENCH_BASE/slurm/slime-multinode-${jobid%%;*}.out
